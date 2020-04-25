@@ -47,6 +47,8 @@ var StorageBlkDevices block.BlockDevices
 // kernel cmdline is checked in sluinit.
 var Debug = func(string, ...interface{}) {}
 
+var NoTPM = false
+
 // WriteToFile writes a byte slice to a target file on an
 // already mounted disk and returns the target file path.
 //
