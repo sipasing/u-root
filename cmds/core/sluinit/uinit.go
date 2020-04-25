@@ -5,16 +5,16 @@
 package main
 
 import (
-	"bytes"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"time"
-	"os/exec"
+    "errors"
 	"strings"
-
+    "path/filepath"
+    
+	"github.com/u-root/u-root/pkg/sh"
 	"github.com/u-root/u-root/pkg/cmdline"
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
 	"github.com/u-root/u-root/pkg/securelaunch/policy"
@@ -23,6 +23,7 @@ import (
 
 var (
 	slDebug = flag.Bool("d", false, "enable debug logs")
+	noTPM   = flag.Bool("t", false, "disable TPM")
 )
 
 func checkDebugFlag() {
@@ -36,9 +37,16 @@ func checkDebugFlag() {
 		log.Fatal("Incorrect number of arguments")
 	}
 
-	if *slDebug {
+    if *slDebug {
 		slaunch.Debug = log.Printf
 		slaunch.Debug("debug flag is set. Logging Enabled.")
+	}
+
+    if *noTPM {
+		slaunch.Debug = log.Printf
+		slaunch.Debug("TPM flag enables debug flag by default.Logging Enabled.")
+		slaunch.Debug("TPM is disabled. No measurements will be taken.")
+		slaunch.NoTPM = true;
 	}
 }
 
@@ -57,12 +65,16 @@ func main() {
 
 	defer unmountAndExit() // called only on error, on success we kexec
 	slaunch.Debug("********Step 1: init completed. starting main ********")
-	tpmDev, err := tpm.GetHandle()
-	if err != nil {
-		log.Printf("tpm.getHandle failed. err=%v", err)
-		return
-	}
-	defer tpmDev.Close()
+
+    tpmDev, err := tpm.GetHandle();
+    if err != nil {
+        log.Printf("tpm.getHandle failed. err=%v", err)
+        return
+    }
+
+    if (tpmDev != nil) {
+        defer tpmDev.Close()
+    }
 
 	slaunch.Debug("********Step 2: locate and parse SL Policy ********")
 	p, err := policy.Get(tpmDev)
@@ -126,7 +138,6 @@ func unmountAndExit() {
 // netroot=iscsi:@10.196.210.64::3260::iqn.1986-03.com.sun:ovs112-boot
 //NOTE:  if you have two netroot params in kernel command line , second one will be used.
 func scanIscsiDrives() error {
-
 	log.Printf("Scanning kernel cmd line for *netroot* flag")
 	val, ok := cmdline.Flag("netroot")
 	if !ok {
@@ -176,15 +187,34 @@ func scanIscsiDrives() error {
 		portalGroup = "1"
 	}
 
-	cmd00 := exec.Command("iscsistart", "-d=ERROR", "-a", ip, "-g", portalGroup, "-p", port, "-t", target, "-i", initiatorName)
-	var out00 bytes.Buffer
-	cmd00.Stdout = &out00
-	log.Printf("Executing %v", cmd00.Args)
-	if err00 := cmd00.Run(); err00 != nil {
-		fmt.Println(err00)
-	} else {
-		log.Printf("Output: %v", cmd00.Stdout)
-	}
+    err := sh.RunWithLogs("iscsistart", "-d=INFO", "-a", ip, "-g", portalGroup, "-p", port, "-t", target, "-i", initiatorName)
+    if err != nil {
+       log.Printf("sh.RunWithLogs returned err=%v", err) 
+       return err
+    }
+
+    // see if /sys/class/block has been populated or wait a few times.
+    // max sleep if no block devices is 300 msec.
+    var matches []string
+    for i := 1; i < 10; i++ {
+        var err error
+        log.Printf("Waiting for block device...")
+        time.Sleep(30 * time.Millisecond)
+        matches, err = filepath.Glob("/sys/class/block/*")
+        if err != nil {
+            return fmt.Errorf("filepath.Glob fn returned error, err = %v", err)
+        }
+
+        if len(matches) > 0 {
+            log.Printf("filepath.Glob has atleast one match, breaking out of for loop")
+            break
+        }
+    }
+
+    if len(matches) == 0 {  
+        return errors.New("No block devices found. Timing out after waiting for 300msec")
+    }
+
 	return nil
 }
 

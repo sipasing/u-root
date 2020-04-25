@@ -104,6 +104,11 @@ func hashReader(f io.Reader) []byte {
  * that can be used for storing hashes.
  */
 func GetHandle() (io.ReadWriteCloser, error) {
+    if (slaunch.NoTPM) {    
+        slaunch.Debug("slaunch.NoTPM flag is set. TPM Handle not needed")
+        return nil, nil
+    }
+
 	tpm2, err := tpm2.OpenTPM("/dev/tpm0")
 	if err != nil {
 		return nil, fmt.Errorf("couldn't talk to TPM Device: err=%v", err)
@@ -147,6 +152,11 @@ func ExtendPCR(tpmHandle io.ReadWriteCloser, pcr int, hash []byte) error {
  * 3. compares old and new pcr values and prints error if they are not
  */
 func ExtendPCRDebug(tpmHandle io.ReadWriteCloser, pcr int, data io.Reader, eventDesc string) error {
+    if (slaunch.NoTPM) {    
+        slaunch.Debug("slaunch.NoTPM flag is set. No PCRs extended and no measurement events sent.");
+        return nil;
+    }
+
 	oldPCRValue, err := ReadPCR(tpmHandle, pcr)
 	if err != nil {
 		return fmt.Errorf("ReadPCR failed, err=%v", err)

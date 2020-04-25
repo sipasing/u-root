@@ -75,6 +75,11 @@ func parseEvtLog(evtLogFile string) ([]byte, error) {
 // returns
 // - error if parsing eventlog fails or user enters incorrect format for input.
 func (e *EventLog) Parse() error {
+    if (slaunch.NoTPM) {
+        slaunch.Debug("Not parsing eventlogs since TPM is disabled")
+        return nil
+    }
+
 	if e.Type != "file" {
 		return fmt.Errorf("unsupported eventlog type exiting")
 	}
