@@ -7,13 +7,12 @@ package measurement
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
 
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
-	"github.com/u-root/u-root/pkg/securelaunch/tpm"
+	"github.com/u-root/u-root/pkg/tss"
 )
 
 /* describes the "storage" portion of policy file */
@@ -47,7 +46,7 @@ func NewStorageCollector(config []byte) (Collector, error) {
  * returns
  * - error if Reading the block device fails.
  */
-func measureStorageDevice(tpmHandle io.ReadWriteCloser, blkDevicePath string) error {
+func measureStorageDevice(tpm *tss.TPM, blkDevicePath string) error {
 
 	log.Printf("Storage Collector: Measuring block device %s\n", blkDevicePath)
 	file, err := os.Open(blkDevicePath)
@@ -55,8 +54,16 @@ func measureStorageDevice(tpmHandle io.ReadWriteCloser, blkDevicePath string) er
 		return fmt.Errorf("couldn't open disk=%s err=%v", blkDevicePath, err)
 	}
 
+    b := hashReader(file)
+    if err := tpm.Extend(b, pcr); err != nil {
+        return err
+    }
+
 	eventDesc := fmt.Sprintf("Storage Collector: Measured %s", blkDevicePath)
-	return tpm.ExtendPCRDebug(tpmHandle, pcr, file, eventDesc)
+    if err := sendEventToSysfs(b, pcr, eventDesc); err != nil {
+        return err
+    }
+    return nil
 }
 
 /*
@@ -65,7 +72,7 @@ func measureStorageDevice(tpmHandle io.ReadWriteCloser, blkDevicePath string) er
  * form /dev/sda. measureStorageDevice in turn calls tpm
  * package which further hashes this buffer and extends pcr.
  */
-func (s *StorageCollector) Collect(tpmHandle io.ReadWriteCloser) error {
+func (s *StorageCollector) Collect(tpm *tss.TPM) error {
 
 	for _, inputVal := range s.Paths {
 		device, e := slaunch.GetStorageDevice(inputVal) // inputVal is blkDevicePath e.g UUID or sda
@@ -74,7 +81,7 @@ func (s *StorageCollector) Collect(tpmHandle io.ReadWriteCloser) error {
 			return e
 		}
 		devPath := filepath.Join("/dev", device.Name)
-		err := measureStorageDevice(tpmHandle, devPath)
+		err := measureStorageDevice(tpm, devPath)
 		if err != nil {
 			log.Printf("Storage Collector: input = %s, err = %v", inputVal, err)
 			return err

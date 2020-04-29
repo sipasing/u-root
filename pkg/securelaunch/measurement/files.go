@@ -5,16 +5,14 @@
 package measurement
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 
 	"github.com/u-root/u-root/pkg/mount"
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
-	"github.com/u-root/u-root/pkg/securelaunch/tpm"
+	"github.com/u-root/u-root/pkg/tss"
 )
 
 /* describes the "files" portion of policy file */
@@ -40,9 +38,18 @@ func NewFileCollector(config []byte) (Collector, error) {
 
 // HashBytes extends PCR with a byte array and sends an event to sysfs.
 // the sent event is described via eventDesc.
-func HashBytes(tpmHandle io.ReadWriteCloser, b []byte, eventDesc string) error {
-	return tpm.ExtendPCRDebug(tpmHandle, pcr, bytes.NewReader(b), eventDesc)
+func HashBytes(tpm *tss.TPM, b []byte, eventDesc string) error {
+	if err := tpm.Extend(b, pcr); err != nil {
+        return err
+    }
+
+    if err := sendEventToSysfs(b, pcr, eventDesc); err != nil {
+        return err
+    }
+
+    return nil
 }
+
 
 /*
  * HashFile reads file input by user and calls TPM to measure it and store the hash.
@@ -55,7 +62,7 @@ func HashBytes(tpmHandle io.ReadWriteCloser, b []byte, eventDesc string) error {
  * 3. Unmount device
  * 4. Call tpm package which measures byte slice and stores it.
  */
-func HashFile(tpmHandle io.ReadWriteCloser, inputVal string) error {
+func HashFile(tpm *tss.TPM, inputVal string) error {
 	// inputVal is of type sda:path
 	mntFilePath, e := slaunch.GetMountedFilePath(inputVal, mount.MS_RDONLY)
 	if e != nil {
@@ -65,14 +72,22 @@ func HashFile(tpmHandle io.ReadWriteCloser, inputVal string) error {
 	slaunch.Debug("File Collector: Reading file=%s", mntFilePath)
 
 	slaunch.Debug("File Collector: fileP=%s\n", mntFilePath)
-	d, err := ioutil.ReadFile(mntFilePath)
+	b, err := ioutil.ReadFile(mntFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to read target file: filePath=%s, inputVal=%s, err=%v",
 			mntFilePath, inputVal, err)
 	}
 
+	if err := tpm.Extend(b, pcr); err != nil {
+        return err
+    }
+
 	eventDesc := fmt.Sprintf("File Collector: measured %s", inputVal)
-	return tpm.ExtendPCRDebug(tpmHandle, pcr, bytes.NewReader(d), eventDesc)
+    if err := sendEventToSysfs(b, pcr, eventDesc); err != nil {
+        return err
+    }
+
+    return nil
 }
 
 /*
@@ -80,10 +95,10 @@ func HashFile(tpmHandle io.ReadWriteCloser, inputVal string) error {
  * and for each file path,  calls HashFile. HashFile measures each file on
  * that path and stores the result in TPM.
  */
-func (s *FileCollector) Collect(tpmHandle io.ReadWriteCloser) error {
+func (s *FileCollector) Collect(tpm *tss.TPM) error {
 	for _, inputVal := range s.Paths {
 		// inputVal is of type sda:/path/to/file
-		err := HashFile(tpmHandle, inputVal)
+		err := HashFile(tpm, inputVal)
 		if err != nil {
 			log.Printf("File Collector: input=%s, err = %v", inputVal, err)
 			return err
