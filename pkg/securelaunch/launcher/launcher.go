@@ -7,6 +7,7 @@ package launcher
 
 import (
 	"fmt"
+	"io"
 	"log"
 
 	"github.com/u-root/u-root/pkg/boot"
@@ -14,7 +15,6 @@ import (
 	"github.com/u-root/u-root/pkg/mount"
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
 	"github.com/u-root/u-root/pkg/securelaunch/measurement"
-	"github.com/u-root/u-root/pkg/tss"
 	"github.com/u-root/u-root/pkg/uio"
 )
 
@@ -26,17 +26,17 @@ type Launcher struct {
 
 // MeasureKernel calls file collector in measurement pkg that
 // hashes kernel, initrd files and even store these hashes in tpm pcrs.
-func (l *Launcher) MeasureKernel(tpm *tss.TPM) error {
+func (l *Launcher) MeasureKernel(tpmDev io.ReadWriteCloser) error {
 
 	kernel := l.Params["kernel"]
 	initrd := l.Params["initrd"]
 
-	if e := measurement.HashFile(tpm, kernel); e != nil {
+	if e := measurement.HashFile(tpmDev, kernel); e != nil {
 		log.Printf("ERR: measure kernel input=%s, err=%v", kernel, e)
 		return e
 	}
 
-	if e := measurement.HashFile(tpm, initrd); e != nil {
+	if e := measurement.HashFile(tpmDev, initrd); e != nil {
 		log.Printf("ERR: measure initrd input=%s, err=%v", initrd, e)
 		return e
 	}
@@ -49,6 +49,7 @@ func (l *Launcher) MeasureKernel(tpm *tss.TPM) error {
  *
  * Summary of steps:
  * - extracts the kernel, initrd and cmdline from the "launcher" section of policy file.
+ * - measures the kernel and initrd file into the tpmDev (tpm device).
  * - mounts the disks where the kernel and initrd file are located.
  * - uses kexec to boot into the target kernel.
  * returns error
@@ -56,7 +57,7 @@ func (l *Launcher) MeasureKernel(tpm *tss.TPM) error {
  * - if mount fails
  * - if kexec fails
  */
-func (l *Launcher) Boot() error {
+func (l *Launcher) Boot(tpmDev io.ReadWriteCloser) error {
 
 	if l.Type != "kexec" {
 		log.Printf("launcher: Unsupported launcher type. Exiting.")

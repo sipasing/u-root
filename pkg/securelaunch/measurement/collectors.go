@@ -9,10 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"crypto/sha256"
-    "log"
-
-	"github.com/u-root/u-root/pkg/tss"
 )
 
 /*
@@ -20,7 +16,7 @@ import (
  * will be stored.
  */
 const (
-	pcr = uint32(22)
+	pcr = int(22)
 )
 
 /*
@@ -29,7 +25,7 @@ const (
  * owned by the tpm device.
  */
 type Collector interface {
-	Collect(tpm *tss.TPM) error
+	Collect(tpmHandle io.ReadWriteCloser) error
 }
 
 var supportedCollectors = map[string]func([]byte) (Collector, error){
@@ -60,17 +56,4 @@ func GetCollector(config []byte) (Collector, error) {
 	}
 
 	return nil, fmt.Errorf("unsupported collector %s", header.Type)
-}
-
-/*
- * hashReader calculates the sha256 sum of an io reader.
- */
-func hashReader(f io.Reader) []byte {
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		log.Fatal(err)
-	}
-
-	return h.Sum(nil)
 }

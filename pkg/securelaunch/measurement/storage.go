@@ -7,12 +7,13 @@ package measurement
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
-	"github.com/u-root/u-root/pkg/tss"
+	"github.com/u-root/u-root/pkg/securelaunch/tpm"
 )
 
 /* describes the "storage" portion of policy file */
@@ -46,7 +47,7 @@ func NewStorageCollector(config []byte) (Collector, error) {
  * returns
  * - error if Reading the block device fails.
  */
-func measureStorageDevice(tpm *tss.TPM, blkDevicePath string) error {
+func measureStorageDevice(tpmHandle io.ReadWriteCloser, blkDevicePath string) error {
 
 	log.Printf("Storage Collector: Measuring block device %s\n", blkDevicePath)
 	file, err := os.Open(blkDevicePath)
@@ -54,16 +55,8 @@ func measureStorageDevice(tpm *tss.TPM, blkDevicePath string) error {
 		return fmt.Errorf("couldn't open disk=%s err=%v", blkDevicePath, err)
 	}
 
-    b := hashReader(file)
-    if err := tpm.Extend(b, pcr); err != nil {
-        return err
-    }
-
 	eventDesc := fmt.Sprintf("Storage Collector: Measured %s", blkDevicePath)
-    if err := sendEventToSysfs(b, pcr, eventDesc); err != nil {
-        return err
-    }
-    return nil
+	return tpm.ExtendPCRDebug(tpmHandle, pcr, file, eventDesc)
 }
 
 /*
@@ -72,7 +65,7 @@ func measureStorageDevice(tpm *tss.TPM, blkDevicePath string) error {
  * form /dev/sda. measureStorageDevice in turn calls tpm
  * package which further hashes this buffer and extends pcr.
  */
-func (s *StorageCollector) Collect(tpm *tss.TPM) error {
+func (s *StorageCollector) Collect(tpmHandle io.ReadWriteCloser) error {
 
 	for _, inputVal := range s.Paths {
 		device, e := slaunch.GetStorageDevice(inputVal) // inputVal is blkDevicePath e.g UUID or sda
@@ -81,7 +74,7 @@ func (s *StorageCollector) Collect(tpm *tss.TPM) error {
 			return e
 		}
 		devPath := filepath.Join("/dev", device.Name)
-		err := measureStorageDevice(tpm, devPath)
+		err := measureStorageDevice(tpmHandle, devPath)
 		if err != nil {
 			log.Printf("Storage Collector: input = %s, err = %v", inputVal, err)
 			return err

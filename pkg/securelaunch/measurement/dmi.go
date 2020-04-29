@@ -5,14 +5,16 @@
 package measurement
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"strings"
 
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
-	"github.com/u-root/u-root/pkg/tss"
+	"github.com/u-root/u-root/pkg/securelaunch/tpm"
 	"github.com/u-root/u-root/pkg/smbios"
 )
 
@@ -109,7 +111,7 @@ func parseTypeFilter(typeStrings []string) (map[smbios.TableType]bool, error) {
  * 2. then, filters smbios data based on type provided in policy file, and
  * 3. the filtered data is then measured into the tpmHandle (tpm device).
  */
-func (s *DmiCollector) Collect(tpm *tss.TPM) error {
+func (s *DmiCollector) Collect(tpmHandle io.ReadWriteCloser) error {
 	slaunch.Debug("DMI Collector: Entering ")
 	if s.Type != "dmi" {
 		return errors.New("invalid type passed to a DmiCollector method")
@@ -150,15 +152,11 @@ func (s *DmiCollector) Collect(tpm *tss.TPM) error {
 
 		slaunch.Debug(pt.String())
 		b := []byte(pt.String())
-		if e := tpm.Extend(b, pcr); e != nil {
+		eventDesc := fmt.Sprintf("DMI Collector: Measured dmi label=[%v]", t.Type)
+		if e := tpm.ExtendPCRDebug(tpmHandle, pcr, bytes.NewReader(b), eventDesc); e != nil {
 			log.Printf("DMI Collector: err =%v", e)
 			return e // return error if any single type fails ..
 		}
-
-		eventDesc := fmt.Sprintf("DMI Collector: Measured dmi label=[%v]", t.Type)
-        if err := sendEventToSysfs(b, pcr, eventDesc); err != nil {
-            return err
-        }
 	}
 
 	return nil

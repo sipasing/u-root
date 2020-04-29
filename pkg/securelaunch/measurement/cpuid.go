@@ -5,14 +5,16 @@
 package measurement
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"strings"
 
 	"github.com/intel-go/cpuid"
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
-	"github.com/u-root/u-root/pkg/tss"
+	"github.com/u-root/u-root/pkg/securelaunch/tpm"
 )
 
 const (
@@ -107,18 +109,14 @@ func getCPUIDInfo() []byte {
 /*
  * measureCPUIDFile stores the CPUIDInfo obtained from cpuid package
  * into the tpm device */
-func measureCPUIDFile(tpm *tss.TPM) ([]byte, error) {
-	b := getCPUIDInfo() // return strings builder
-	if e := tpm.Extend(b, pcr); e != nil {
+func measureCPUIDFile(tpmHandle io.ReadWriteCloser) ([]byte, error) {
+	d := getCPUIDInfo() // return strings builder
+	eventDesc := "CPUID Collector: Measured CPUID Info"
+	if e := tpm.ExtendPCRDebug(tpmHandle, pcr, bytes.NewReader(d), eventDesc); e != nil {
 		return nil, e
 	}
 
-	eventDesc := "CPUID Collector: Measured CPUID Info"
-    if e := sendEventToSysfs(b, pcr, eventDesc); e != nil {
-        return nil, e
-    }
-
-	return b, nil
+	return d, nil
 }
 
 /*
@@ -127,9 +125,9 @@ func measureCPUIDFile(tpm *tss.TPM) ([]byte, error) {
  * 2. stores hash of the result in the tpm device.
  * 3. also keeps a copy of the result on disk at location provided in policy file.
  */
-func (s *CPUIDCollector) Collect(tpm *tss.TPM) error {
+func (s *CPUIDCollector) Collect(tpmHandle io.ReadWriteCloser) error {
 
-	d, err := measureCPUIDFile(tpm)
+	d, err := measureCPUIDFile(tpmHandle)
 	if err != nil {
 		log.Printf("CPUID Collector: err = %v", err)
 		return err

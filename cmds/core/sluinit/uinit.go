@@ -5,19 +5,20 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"time"
+	"os/exec"
 	"strings"
 
-	"github.com/u-root/iscsinl"
 	"github.com/u-root/u-root/pkg/cmdline"
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
 	"github.com/u-root/u-root/pkg/securelaunch/policy"
-	"github.com/u-root/u-root/pkg/tss"
+	"github.com/u-root/u-root/pkg/securelaunch/tpm"
 )
 
 var (
@@ -56,15 +57,15 @@ func main() {
 
 	defer unmountAndExit() // called only on error, on success we kexec
 	slaunch.Debug("********Step 1: init completed. starting main ********")
-	tpm, err := tss.NewTPM()
+	tpmDev, err := tpm.GetHandle()
 	if err != nil {
-		log.Printf("Couldnt talk to tpm device. err=%v", err)
+		log.Printf("tpm.getHandle failed. err=%v", err)
 		return
 	}
-	defer tpm.Close()
+	defer tpmDev.Close()
 
 	slaunch.Debug("********Step 2: locate and parse SL Policy ********")
-	p, err := policy.Get(tpm)
+	p, err := policy.Get(tpmDev)
 	if err != nil {
 		log.Printf("failed to get policy err=%v", err)
 		return
@@ -74,14 +75,14 @@ func main() {
 	slaunch.Debug("********Step 3: Collecting Evidence ********")
 	for _, c := range p.Collectors {
 		slaunch.Debug("Input Collector: %v", c)
-		if e := c.Collect(tpm); e != nil {
+		if e := c.Collect(tpmDev); e != nil {
 			log.Printf("Collector %v failed, err = %v", c, e)
 		}
 	}
 	slaunch.Debug("Collectors completed")
 
 	slaunch.Debug("********Step 4: Measuring target kernel, initrd ********")
-	if err := p.Launcher.MeasureKernel(tpm); err != nil {
+	if err := p.Launcher.MeasureKernel(tpmDev); err != nil {
 		log.Printf("Launcher.MeasureKernel failed err=%v", err)
 		return
 	}
@@ -102,7 +103,7 @@ func main() {
 	slaunch.UnmountAll()
 
 	slaunch.Debug("********Step 7: Launcher called to Boot ********")
-	if err := p.Launcher.Boot(); err != nil {
+	if err := p.Launcher.Boot(tpmDev); err != nil {
 		log.Printf("Boot failed. err=%s", err)
 		return
 	}
@@ -123,38 +124,24 @@ func unmountAndExit() {
 // ERROR         1 - Only print critical errors
 // netroot=iscsi:@10.196.210.62::3260::iqn.1986-03.com.sun:ovs112-boot rd.iscsi.initiator=iqn.1988-12.com.oracle:ovs112
 // netroot=iscsi:@10.196.210.64::3260::iqn.1986-03.com.sun:ovs112-boot
-// netroot=iscsi:[<username>:<password>[:<reverse>:<password>]@][<servername>]:[<protocol>]:[<port>][:[<iscsi_iface_name>]:[<netdev_name>]]:[<LUN>]:<targetname>
-// My interpretation:
-// iscsi:
-//[<username>:<password>[:<reverse>:<password>]@][<servername>]:
-//[<protocol>]:
-//[<port>]:
-//[[<iscsi_iface_name>]:[<netdev_name>]]:
-//[<LUN>]:
-// <targetname>
 //NOTE:  if you have two netroot params in kernel command line , second one will be used.
 func scanIscsiDrives() error {
-	
-    slaunch.Debug("Scanning kernel cmd line for *rd.iscsi.initiator* flag")
-	initiatorName, ok := cmdline.Flag("rd.iscsi.initiator")
-	if !ok {
-		return errors.New("sluinit: rd.iscsi.initiator flag is not set")
-	}
 
-	slaunch.Debug("Scanning kernel cmd line for *netroot* flag")
+	log.Printf("Scanning kernel cmd line for *netroot* flag")
 	val, ok := cmdline.Flag("netroot")
 	if !ok {
-		return errors.New("sluinit: netroot flag is not set")
+		log.Printf("sl_policy netroot flag is not set")
+		return errors.New("Flag Not Set")
 	}
 
 	// val = iscsi:@10.196.210.62::3260::iqn.1986-03.com.sun:ovs112-boot
-	slaunch.Debug("netroot flag is set with val=%s", val)
+	log.Printf("netroot flag is set with val=%s", val)
 	s := strings.Split(val, "::")
 	if len(s) != 3 {
 		return fmt.Errorf("%v: incorrect format ::,  Usage: netroot=iscsi:@10.X.Y.Z::1224::iqn.foo:hostname-bar, [Expecting len(%s) = 3] ", val, s)
 	}
 
-	// s[0] = iscsi:@10.196.210.62
+	// s[0] = iscsi:@10.196.210.62 or iscsi:@10.196.210.62,2
 	// s[1] = 3260
 	// s[2] = iqn.1986-03.com.sun:ovs112-boot
 	port := s[1]
@@ -168,23 +155,36 @@ func scanIscsiDrives() error {
 		return fmt.Errorf("%v: incorrect format iscsi:, Usage: netroot=iscsi:@10.X.Y.Z::1224::iqn.foo:hostname-bar, [ %s != 'iscsi'] ", val, tmp[0])
 	}
 
-    // tmp[1] = 10.196.210.62, port = 3260
-	ip := tmp[1] + ":" + port
+	var ip, group string
+	tmp2 := strings.Split(tmp[1], ",")
+	if len(tmp2) == 1 {
+		ip = tmp[1]
+	} else if len(tmp2) == 2 {
+		ip = tmp[1]
+		group = tmp[2]
+	}
 
-    devices, err := iscsinl.MountIscsi(
-        iscsinl.WithInitiator(initiatorName),
-        iscsinl.WithTarget(ip, target),
-        iscsinl.WithCmdsMax(128),
-        iscsinl.WithQueueDepth(16),
-        iscsinl.WithScheduler("noop"),
-    )
-    if err != nil {
-        return err
-    }
+	log.Printf("Scanning kernel cmd line for *rd.iscsi.initiator* flag")
+	initiatorName, ok := cmdline.Flag("rd.iscsi.initiator")
+	if !ok {
+		log.Printf("sl_policy rd.iscsi.initiator flag is not set")
+		return errors.New("Flag Not Set")
+	}
 
-    for i := range devices {
-        slaunch.Debug("iscsinl mounted at dev %v", devices[i])
-    }
+	var portalGroup string
+	if group == "" {
+		portalGroup = "1"
+	}
+
+	cmd00 := exec.Command("iscsistart", "-d=ERROR", "-a", ip, "-g", portalGroup, "-p", port, "-t", target, "-i", initiatorName)
+	var out00 bytes.Buffer
+	cmd00.Stdout = &out00
+	log.Printf("Executing %v", cmd00.Args)
+	if err00 := cmd00.Run(); err00 != nil {
+		fmt.Println(err00)
+	} else {
+		log.Printf("Output: %v", cmd00.Stdout)
+	}
 	return nil
 }
 
