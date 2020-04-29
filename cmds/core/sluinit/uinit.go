@@ -5,7 +5,7 @@
 package main
 
 import (
-	// "bytes"
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -176,19 +176,15 @@ func scanIscsiDrives() error {
 		portalGroup = "1"
 	}
 
-    ip = ip + ":3260"
-    log.Println("Not using portalGroup, port", portalGroup, port)
-	// cmd00 := exec.Command("iscsistart", "-d=ERROR", "-a", ip, "-g", portalGroup, "-p", port, "-t", target, "-i", initiatorName)
-	out, err00 := exec.Command("iscsistart", "-addr", ip, "-volume", target, "-i", initiatorName).CombinedOutput();
-	//var out00 bytes.Buffer
-	//cmd00.Stdout = &out00
-	//log.Printf("Executing %v", cmd00.Args)
-	if err00 != nil {
-		fmt.Println("err=", err00)
-        log.Printf("Output: %s", out)
-        return err00
+	cmd00 := exec.Command("iscsistart", "-d=ERROR", "-a", ip, "-g", portalGroup, "-p", port, "-t", target, "-i", initiatorName)
+	var out00 bytes.Buffer
+	cmd00.Stdout = &out00
+	log.Printf("Executing %v", cmd00.Args)
+	if err00 := cmd00.Run(); err00 != nil {
+		fmt.Println(err00)
+	} else {
+		log.Printf("Output: %v", cmd00.Stdout)
 	}
-	log.Printf("Output: %s", out)
 	return nil
 }
 
@@ -196,6 +192,5 @@ func init() {
 	err := scanIscsiDrives()
 	if err != nil {
 		log.Printf("NO ISCSI DRIVES found, err=[%v]", err)
-        os.Exit(1)
 	}
 }

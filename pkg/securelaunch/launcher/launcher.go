@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-    "bytes"
-    "os/exec"
 
 	"github.com/u-root/u-root/pkg/boot"
 	"github.com/u-root/u-root/pkg/boot/kexec"
@@ -97,25 +95,10 @@ func (l *Launcher) Boot(tpmDev io.ReadWriteCloser) error {
 		return err
 	}
 
-    end()
 	err = kexec.Reboot()
 	if err != nil {
 		log.Printf("kexec reboot failed. err=%v", err)
 		return err
 	}
 	return nil
-}
-
-
-func end() {    
-    cmd00 := exec.Command("iscsistart", "-teardownSid", "1")
-    var out00 bytes.Buffer
-    cmd00.Stdout = &out00
-    log.Printf("Executing %v", cmd00.Args)
-    if err00 := cmd00.Run(); err00 != nil {
-        fmt.Println(err00)
-        log.Printf("Output: %v", cmd00.Stdout)
-        return
-    }
-    log.Printf("Output: %v", cmd00.Stdout)
 }
