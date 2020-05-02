@@ -19,7 +19,7 @@ import (
 	"github.com/u-root/u-root/pkg/securelaunch/eventlog"
 )
 
-var hashAlgo = tss.HashSHA256
+var hashAlgo = tss.HashSHA256.GoTPMAlg()
 var tpmHandle *tss.TPM = nil
 
 // marshalPcrEvent writes structure fields piecemeal to buffer.
