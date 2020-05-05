@@ -5,16 +5,14 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"time"
-	"os/exec"
 	"strings"
-
+	"github.com/u-root/iscsinl"
 	"github.com/u-root/u-root/pkg/cmdline"
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
 	"github.com/u-root/u-root/pkg/securelaunch/policy"
@@ -116,25 +114,18 @@ func unmountAndExit() {
 	os.Exit(1)
 }
 
-// To run the daemon in debug mode please pass the parameter  '-d <debug level>'
-// DEBUG         4 - Print all messages
-// INFO          3 - Print messages needed to follow the uIP code (default)
-// WARN          2 - Print warning messages
-// ERROR         1 - Only print critical errors
-// netroot=iscsi:@10.196.210.62::3260::iqn.1986-03.com.sun:ovs112-boot rd.iscsi.initiator=iqn.1988-12.com.oracle:ovs112
-// netroot=iscsi:@10.196.210.64::3260::iqn.1986-03.com.sun:ovs112-boot
-//NOTE:  if you have two netroot params in kernel command line , second one will be used.
+// scanIscsiDrives calls iscsinl to mount iscsi drives.
+// format: netroot=iscsi:@X.Y.Z.W::3260::iqn.FOO.com.abc:hostname-boot
 func scanIscsiDrives() error {
 
-	log.Printf("Scanning kernel cmd line for *netroot* flag")
+	slaunch.Debug("Scanning kernel cmd line for *netroot* flag")
 	val, ok := cmdline.Flag("netroot")
 	if !ok {
-		log.Printf("sl_policy netroot flag is not set")
-		return errors.New("Flag Not Set")
+		return errors.New("netroot flag is not set")
 	}
 
 	// val = iscsi:@10.196.210.62::3260::iqn.1986-03.com.sun:ovs112-boot
-	log.Printf("netroot flag is set with val=%s", val)
+	slaunch.Debug("netroot flag is set with val=%s", val)
 	s := strings.Split(val, "::")
 	if len(s) != 3 {
 		return fmt.Errorf("%v: incorrect format ::,  Usage: netroot=iscsi:@10.X.Y.Z::1224::iqn.foo:hostname-bar, [Expecting len(%s) = 3] ", val, s)
@@ -144,7 +135,9 @@ func scanIscsiDrives() error {
 	// s[1] = 3260
 	// s[2] = iqn.1986-03.com.sun:ovs112-boot
 	port := s[1]
-	target := s[2]
+	volume := s[2]
+
+	// split s[0] into tmp[1] and tmp[2]
 	tmp := strings.Split(s[0], ":@")
 	if len(tmp) > 3 || len(tmp) < 2 {
 		return fmt.Errorf("%v: incorrect format :@, Usage: netroot=iscsi:@10.X.Y.Z::1224::iqn.foo:hostname-bar, [ Expecting 2 <= len(%s) <= 3", val, tmp)
@@ -154,35 +147,27 @@ func scanIscsiDrives() error {
 		return fmt.Errorf("%v: incorrect format iscsi:, Usage: netroot=iscsi:@10.X.Y.Z::1224::iqn.foo:hostname-bar, [ %s != 'iscsi'] ", val, tmp[0])
 	}
 
-	var ip, group string
-	tmp2 := strings.Split(tmp[1], ",")
-	if len(tmp2) == 1 {
-		ip = tmp[1]
-	} else if len(tmp2) == 2 {
-		ip = tmp[1]
-		group = tmp[2]
-	}
+	ip := tmp[1] + ":" + port
 
-	log.Printf("Scanning kernel cmd line for *rd.iscsi.initiator* flag")
+	slaunch.Debug("Scanning kernel cmd line for *rd.iscsi.initiator* flag")
 	initiatorName, ok := cmdline.Flag("rd.iscsi.initiator")
 	if !ok {
-		log.Printf("sl_policy rd.iscsi.initiator flag is not set")
-		return errors.New("Flag Not Set")
+		return errors.New("rd.iscsi.initiator flag is not set")
 	}
 
-	var portalGroup string
-	if group == "" {
-		portalGroup = "1"
+	devices, err := iscsinl.MountIscsi(
+		iscsinl.WithInitiator(initiatorName),
+		iscsinl.WithTarget(ip, volume),
+		iscsinl.WithCmdsMax(128),
+		iscsinl.WithQueueDepth(16),
+		iscsinl.WithScheduler("noop"),
+	)
+	if err != nil {
+		return err
 	}
-
-	cmd00 := exec.Command("iscsistart", "-d=ERROR", "-a", ip, "-g", portalGroup, "-p", port, "-t", target, "-i", initiatorName)
-	var out00 bytes.Buffer
-	cmd00.Stdout = &out00
-	log.Printf("Executing %v", cmd00.Args)
-	if err00 := cmd00.Run(); err00 != nil {
-		fmt.Println(err00)
-	} else {
-		log.Printf("Output: %v", cmd00.Stdout)
+	
+	for i := range devices {
+		slaunch.Debug("Mounted at dev %v", devices[i])
 	}
 	return nil
 }
