@@ -8,15 +8,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
-	"os"
-	"time"
-	"strings"
 	"github.com/u-root/iscsinl"
 	"github.com/u-root/u-root/pkg/cmdline"
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
 	"github.com/u-root/u-root/pkg/securelaunch/policy"
 	"github.com/u-root/u-root/pkg/securelaunch/tpm"
+	"log"
+	"os"
+	"strings"
+	"time"
 )
 
 var (
@@ -124,6 +124,10 @@ func scanIscsiDrives() error {
 		return errors.New("netroot flag is not set")
 	}
 
+	// IP v4 address is any address of format 0-255 . 0-255 . 0-255 . 0-255
+	//r := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)){3}`)
+	//fmt.Println(r.MatchString("10.123.234.182"))
+
 	// val = iscsi:@10.196.210.62::3260::iqn.1986-03.com.sun:ovs112-boot
 	slaunch.Debug("netroot flag is set with val=%s", val)
 	s := strings.Split(val, "::")
@@ -165,7 +169,7 @@ func scanIscsiDrives() error {
 	if err != nil {
 		return err
 	}
-	
+
 	for i := range devices {
 		slaunch.Debug("Mounted at dev %v", devices[i])
 	}
