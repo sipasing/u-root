@@ -10,8 +10,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 	"strings"
+	"time"
+
 	"github.com/u-root/iscsinl"
 	"github.com/u-root/u-root/pkg/cmdline"
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
@@ -165,7 +166,7 @@ func scanIscsiDrives() error {
 	if err != nil {
 		return err
 	}
-	
+
 	for i := range devices {
 		slaunch.Debug("Mounted at dev %v", devices[i])
 	}
