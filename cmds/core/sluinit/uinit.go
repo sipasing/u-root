@@ -8,15 +8,16 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/u-root/iscsinl"
 	"github.com/u-root/u-root/pkg/cmdline"
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
 	"github.com/u-root/u-root/pkg/securelaunch/policy"
 	"github.com/u-root/u-root/pkg/securelaunch/tpm"
-	"log"
-	"os"
-	"strings"
-	"time"
 )
 
 var (
