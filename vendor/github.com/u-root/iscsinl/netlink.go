@@ -84,26 +84,26 @@ const (
 	ISCSI_PARAM_INITIATOR_NAME
 )
 
-var paramToString = map[IscsiParam]string {
-	ISCSI_PARAM_TARGET_NAME: "Target Name",
-	ISCSI_PARAM_INITIATOR_NAME: "Inititator Name",
-	ISCSI_PARAM_MAX_RECV_DLENGTH: "Max Recv DLength",
-	ISCSI_PARAM_MAX_XMIT_DLENGTH: "Max Xmit DLenght",
-	ISCSI_PARAM_FIRST_BURST: "First Burst",
-	ISCSI_PARAM_MAX_BURST: "Max Burst",
-	ISCSI_PARAM_PDU_INORDER_EN: "PDU Inorder EN",
+var paramToString = map[IscsiParam]string{
+	ISCSI_PARAM_TARGET_NAME:        "Target Name",
+	ISCSI_PARAM_INITIATOR_NAME:     "Inititator Name",
+	ISCSI_PARAM_MAX_RECV_DLENGTH:   "Max Recv DLength",
+	ISCSI_PARAM_MAX_XMIT_DLENGTH:   "Max Xmit DLenght",
+	ISCSI_PARAM_FIRST_BURST:        "First Burst",
+	ISCSI_PARAM_MAX_BURST:          "Max Burst",
+	ISCSI_PARAM_PDU_INORDER_EN:     "PDU Inorder EN",
 	ISCSI_PARAM_DATASEQ_INORDER_EN: "Data Seq In Order EN",
-	ISCSI_PARAM_INITIAL_R2T_EN: "Inital R2T EN",
-	ISCSI_PARAM_IMM_DATA_EN: "Immediate Data EN",
-	ISCSI_PARAM_EXP_STATSN: "Exp Statsn",
-	ISCSI_PARAM_HDRDGST_EN: "HDR Digest EN",
-	ISCSI_PARAM_DATADGST_EN: "Data Digest EN",
-	ISCSI_PARAM_PING_TMO: "Ping TMO",
-	ISCSI_PARAM_RECV_TMO: "Recv TMO",
+	ISCSI_PARAM_INITIAL_R2T_EN:     "Inital R2T EN",
+	ISCSI_PARAM_IMM_DATA_EN:        "Immediate Data EN",
+	ISCSI_PARAM_EXP_STATSN:         "Exp Statsn",
+	ISCSI_PARAM_HDRDGST_EN:         "HDR Digest EN",
+	ISCSI_PARAM_DATADGST_EN:        "Data Digest EN",
+	ISCSI_PARAM_PING_TMO:           "Ping TMO",
+	ISCSI_PARAM_RECV_TMO:           "Recv TMO",
 }
 
 func (p IscsiParam) String() string {
-	val, ok := paramToString[p] 
+	val, ok := paramToString[p]
 	if !ok {
 		return fmt.Sprintf("IscsiParam(%d)", int(p))
 	}
@@ -416,6 +416,7 @@ func (c *IscsiIpcConn) WaitFor(Type IscsiEvent) (*syscall.NetlinkMessage, error)
 		msgs, _, err := c.Conn.Receive()
 
 		if err != nil {
+			log.Println("WaitFor: Conn Receive returned error")
 			return nil, err
 		}
 
@@ -424,6 +425,7 @@ func (c *IscsiIpcConn) WaitFor(Type IscsiEvent) (*syscall.NetlinkMessage, error)
 			var uevent iSCSIUEvent
 			err = binary.Read(reader, binary.LittleEndian, &uevent)
 			if err != nil {
+				log.Println("WaitFor: binary.Read returned error")
 				return nil, err
 			}
 			if uevent.TransportHandle != c.TransportHandle {
@@ -432,11 +434,13 @@ func (c *IscsiIpcConn) WaitFor(Type IscsiEvent) (*syscall.NetlinkMessage, error)
 			if uevent.Type == Type {
 				return &msg, nil
 			} else if uevent.Type == ISCSI_KEVENT_CONN_ERROR {
+				log.Println("WaitFor: uevent.Type == ISCSI_KEVENT_CONN_ERROR")
 				reader.Seek(0, 0)
 				var connErr iSCSIKEventConnError
 				binary.Read(reader, binary.LittleEndian, &connErr)
 				return nil, fmt.Errorf("connection error: %+v", connErr)
 			} else if uevent.Type == ISCSI_KEVENT_IF_ERROR {
+				log.Println("WaitFor: uevent.Type == ISCSI_KEVENT_IF_ERROR")
 				return nil, fmt.Errorf("interface error: %v (invalid netlink message?)", uevent.IfError)
 			}
 
@@ -511,7 +515,7 @@ func (c *IscsiIpcConn) CreateSession(cmdsMax uint16, queueDepth uint16) (sid uin
 	if err := c.DoNetlink(unsafe.Pointer(&cSession)); err != nil {
 		return 0, 0, err
 	}
-	log.Println("Created new session ", cSession)
+	log.Println("Created new session HOO HAA", cSession)
 
 	return cSession.CSessionRet.Sid, cSession.CSessionRet.HostNo, nil
 }
@@ -686,7 +690,8 @@ type PduLike interface {
 func (c *IscsiIpcConn) RecvPDU(sid uint32, cid uint32) ([]byte, error) {
 	response, err := c.WaitFor(ISCSI_KEVENT_RECV_PDU)
 	if err != nil {
-		return nil, err
+		log.Println("Waiting for ISCSI_KEVENT_RECV_PDU returned error, not returning")
+		// return nil, err
 	}
 
 	var recvReq iSCSIKEventRecvEvent
