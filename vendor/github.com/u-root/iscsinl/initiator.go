@@ -620,7 +620,7 @@ func (s *IscsiTargetSession) processLoginResponse(response []byte) error {
 // https://www.ietf.org/rfc/rfc3720.txt
 // For now "negotiates" no auth security.
 func (s *IscsiTargetSession) Login() error {
-	log.Println("Starting login...HO HA HA")
+	log.Println("Starting login...current stage=", s.currStage)
 
 	for s.currStage != ISCSI_OP_PARMS_NEGOTIATION_STAGE {
 
@@ -637,6 +637,7 @@ func (s *IscsiTargetSession) Login() error {
 		}
 		hton48(&loginReq.Header.Isid, int(s.sid))
 		loginReq.AddParam("AuthMethod=None")
+		loginReq.AddParam("SessionType=Normal")
 		loginReq.AddParam(fmt.Sprintf("InitiatorName=%s", s.opts.InitiatorName))
 		loginReq.AddParam(fmt.Sprintf("TargetName=%s", s.opts.Volume))
 

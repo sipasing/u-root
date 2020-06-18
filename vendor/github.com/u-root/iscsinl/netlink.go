@@ -86,7 +86,7 @@ const (
 
 var paramToString = map[IscsiParam]string{
 	ISCSI_PARAM_TARGET_NAME:        "Target Name",
-	ISCSI_PARAM_INITIATOR_NAME:     "Inititator Name",
+	ISCSI_PARAM_INITIATOR_NAME:     "Initiator Name",
 	ISCSI_PARAM_MAX_RECV_DLENGTH:   "Max Recv DLength",
 	ISCSI_PARAM_MAX_XMIT_DLENGTH:   "Max Xmit DLenght",
 	ISCSI_PARAM_FIRST_BURST:        "First Burst",
@@ -434,7 +434,7 @@ func (c *IscsiIpcConn) WaitFor(Type IscsiEvent) (*syscall.NetlinkMessage, error)
 			if uevent.Type == Type {
 				return &msg, nil
 			} else if uevent.Type == ISCSI_KEVENT_CONN_ERROR {
-				log.Println("WaitFor: uevent.Type == ISCSI_KEVENT_CONN_ERROR")
+				log.Println("WaitFor: uevent.Type == ISCSI_KEVENT_CONN_ERROR, commented out error")
 				reader.Seek(0, 0)
 				var connErr iSCSIKEventConnError
 				binary.Read(reader, binary.LittleEndian, &connErr)
@@ -690,8 +690,7 @@ type PduLike interface {
 func (c *IscsiIpcConn) RecvPDU(sid uint32, cid uint32) ([]byte, error) {
 	response, err := c.WaitFor(ISCSI_KEVENT_RECV_PDU)
 	if err != nil {
-		log.Println("Waiting for ISCSI_KEVENT_RECV_PDU returned error, not returning")
-		// return nil, err
+		return nil, err
 	}
 
 	var recvReq iSCSIKEventRecvEvent
