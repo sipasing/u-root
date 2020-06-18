@@ -416,7 +416,6 @@ func (c *IscsiIpcConn) WaitFor(Type IscsiEvent) (*syscall.NetlinkMessage, error)
 		msgs, _, err := c.Conn.Receive()
 
 		if err != nil {
-			log.Println("WaitFor: Conn Receive returned error")
 			return nil, err
 		}
 
@@ -425,7 +424,6 @@ func (c *IscsiIpcConn) WaitFor(Type IscsiEvent) (*syscall.NetlinkMessage, error)
 			var uevent iSCSIUEvent
 			err = binary.Read(reader, binary.LittleEndian, &uevent)
 			if err != nil {
-				log.Println("WaitFor: binary.Read returned error")
 				return nil, err
 			}
 			if uevent.TransportHandle != c.TransportHandle {
@@ -434,13 +432,11 @@ func (c *IscsiIpcConn) WaitFor(Type IscsiEvent) (*syscall.NetlinkMessage, error)
 			if uevent.Type == Type {
 				return &msg, nil
 			} else if uevent.Type == ISCSI_KEVENT_CONN_ERROR {
-				log.Println("WaitFor: uevent.Type == ISCSI_KEVENT_CONN_ERROR, commented out error")
 				reader.Seek(0, 0)
 				var connErr iSCSIKEventConnError
 				binary.Read(reader, binary.LittleEndian, &connErr)
 				return nil, fmt.Errorf("connection error: %+v", connErr)
 			} else if uevent.Type == ISCSI_KEVENT_IF_ERROR {
-				log.Println("WaitFor: uevent.Type == ISCSI_KEVENT_IF_ERROR")
 				return nil, fmt.Errorf("interface error: %v (invalid netlink message?)", uevent.IfError)
 			}
 
@@ -515,7 +511,7 @@ func (c *IscsiIpcConn) CreateSession(cmdsMax uint16, queueDepth uint16) (sid uin
 	if err := c.DoNetlink(unsafe.Pointer(&cSession)); err != nil {
 		return 0, 0, err
 	}
-	log.Println("Created new session HOO HAA", cSession)
+	log.Println("Created new session ", cSession)
 
 	return cSession.CSessionRet.Sid, cSession.CSessionRet.HostNo, nil
 }

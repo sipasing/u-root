@@ -620,11 +620,9 @@ func (s *IscsiTargetSession) processLoginResponse(response []byte) error {
 // https://www.ietf.org/rfc/rfc3720.txt
 // For now "negotiates" no auth security.
 func (s *IscsiTargetSession) Login() error {
-	log.Println("Starting login...current stage=", s.currStage)
+	log.Println("Starting login...")
 
 	for s.currStage != ISCSI_OP_PARMS_NEGOTIATION_STAGE {
-
-		log.Println("s.currStage != ISCSI_OP_PARMS_NEGOTIATION_STAGE")
 		loginReq := IscsiLoginPdu{
 			Header: LoginHdr{
 				Opcode:     ISCSI_OP_LOGIN | ISCSI_OP_IMMEDIATE,
@@ -641,7 +639,6 @@ func (s *IscsiTargetSession) Login() error {
 		loginReq.AddParam(fmt.Sprintf("InitiatorName=%s", s.opts.InitiatorName))
 		loginReq.AddParam(fmt.Sprintf("TargetName=%s", s.opts.Volume))
 
-		log.Println(loginReq.TextSegments.String())
 		if err := s.netlink.SendPDU(s.sid, s.cid, &loginReq); err != nil {
 			return fmt.Errorf("sendPDU: %v", err)
 		}
@@ -655,10 +652,7 @@ func (s *IscsiTargetSession) Login() error {
 		}
 	}
 
-	log.Println("in between two for loops")
 	for s.currStage != ISCSI_FULL_FEATURE_PHASE {
-
-		log.Println("s.currStage != ISCSI_OP_PARMS_NEGOTIATION_STAGE")
 		loginReq := IscsiLoginPdu{
 			Header: LoginHdr{
 				Opcode:     ISCSI_OP_LOGIN | ISCSI_OP_IMMEDIATE,
@@ -683,7 +677,6 @@ func (s *IscsiTargetSession) Login() error {
 		loginReq.AddParam(fmt.Sprintf("DataPDUInOrder=%v", iscsiBoolStr(s.opts.DataPDUInOrder)))
 		loginReq.AddParam(fmt.Sprintf("DataSequenceInOrder=%v", iscsiBoolStr(s.opts.DataSequenceInOrder)))
 
-		log.Println(loginReq.TextSegments.String())
 		if err := s.netlink.SendPDU(s.sid, s.cid, &loginReq); err != nil {
 			return fmt.Errorf("sendpdu2: %v", err)
 		}
@@ -696,8 +689,6 @@ func (s *IscsiTargetSession) Login() error {
 			return err
 		}
 	}
-
-	log.Println("end of two for loops")
 	return nil
 
 }
