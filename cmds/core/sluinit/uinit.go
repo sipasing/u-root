@@ -168,26 +168,20 @@ func scanIscsiDrives() error {
 		return errors.New("rd.iscsi.initiator flag is not set")
 	}
 
-	for i := 0; i < 5; i++ {
-		log.Println("Attempt #", i+1)
-		devices, err := iscsinl.MountIscsi(
-			iscsinl.WithInitiator(initiatorName),
-			iscsinl.WithTarget(ip, volume),
-			iscsinl.WithCmdsMax(128),
-			iscsinl.WithQueueDepth(16),
-			iscsinl.WithScheduler("noop"),
-		)
-		if err == nil {
-			for i := range devices {
-				slaunch.Debug("Mounted at dev %v", devices[i])
-			}
-			break
-		} else {
-			log.Println("Attempt #", i+1, " err=", err)
-			continue
-		}
+	devices, err := iscsinl.MountIscsi(
+		iscsinl.WithInitiator(initiatorName),
+		iscsinl.WithTarget(ip, volume),
+		iscsinl.WithCmdsMax(128),
+		iscsinl.WithQueueDepth(16),
+		iscsinl.WithScheduler("noop"),
+	)
+	if err != nil {
+		return err
 	}
 
+	for i := range devices {
+		slaunch.Debug("Mounted at dev %v", devices[i])
+	}
 	return nil
 }
 
