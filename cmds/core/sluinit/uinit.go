@@ -22,7 +22,6 @@ import (
 
 var (
 	slDebug = flag.Bool("d", false, "enable debug logs")
-	noTPM   = flag.Bool("t", false, "disable TPM")
 )
 
 func checkDebugFlag() {
@@ -39,13 +38,6 @@ func checkDebugFlag() {
 	if *slDebug {
 		slaunch.Debug = log.Printf
 		slaunch.Debug("debug flag is set. Logging Enabled.")
-	}
-
-	if *noTPM {
-		slaunch.Debug = log.Printf
-		slaunch.Debug("TPM flag enables debug flag by default.Logging Enabled.")
-		slaunch.Debug("TPM is disabled. No measurements will be taken.")
-		slaunch.NoTPM = true
 	}
 }
 
