@@ -298,11 +298,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:087484f0c1f151f7e9f7fd8710dfb7f89c950585ca3b3d2988a8be823fe73155"
+  digest = "1:2b8242061102cfba7c600a90c8d64465de5387a6198987e2f2d2afb69bb4c355"
   name = "github.com/u-root/iscsinl"
   packages = ["."]
   pruneopts = "NUT"
-  revision = "87c4d1914cd9940cd91756167410c3cc781abb1c"
+  revision = "ee1a8f979f6802a4c7d5d6d41353efe8110a78ef"
 
 [[projects]]
   branch = "master"
