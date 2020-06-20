@@ -43,7 +43,7 @@ var mountCache = mountCacheType{m: make(map[string]mountCacheData)}
 // StorageBlkDevices helps securelaunch pkg mount devices.
 var StorageBlkDevices block.BlockDevices
 
-// Debug enables verbose logs if kernel cmd line has uroot.uinitargs=-d flag set.
+// Debug enables logs printed to stdout if kernel cmd line has uroot.uinitargs=-d flag set.
 // kernel cmdline is checked in sluinit.
 var Debug = func(string, ...interface{}) {}
 
