@@ -9,12 +9,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/u-root/iscsinl"
 	"github.com/u-root/u-root/pkg/cmdline"
+	"github.com/u-root/u-root/pkg/dhclient"
 	slaunch "github.com/u-root/u-root/pkg/securelaunch"
 	"github.com/u-root/u-root/pkg/securelaunch/policy"
 	"github.com/u-root/u-root/pkg/securelaunch/tpm"
@@ -53,6 +54,11 @@ func checkDebugFlag() {
  */
 func main() {
 	checkDebugFlag()
+
+	err := scanIscsiDrives()
+	if err != nil {
+		log.Printf("NO ISCSI DRIVES found, err=[%v]", err)
+	}
 
 	defer unmountAndExit() // called only on error, on success we kexec
 	slaunch.Debug("********Step 1: init completed. starting main ********")
@@ -115,44 +121,25 @@ func unmountAndExit() {
 	os.Exit(1)
 }
 
-// scanIscsiDrives calls iscsinl to mount iscsi drives.
-// format: netroot=iscsi:@X.Y.Z.W::3260::iqn.FOO.com.abc:hostname-boot
+// scanIscsiDrives calls dhcleint to parse cmdline and
+// iscsinl to mount iscsi drives.
 func scanIscsiDrives() error {
 
-	slaunch.Debug("Scanning kernel cmd line for *netroot* flag")
 	val, ok := cmdline.Flag("netroot")
 	if !ok {
 		return errors.New("netroot flag is not set")
 	}
-
-	// IP v4 address is any address of format 0-255 . 0-255 . 0-255 . 0-255
-	//r := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)){3}`)
-	//fmt.Println(r.MatchString("10.123.234.182"))
-
-	// val = iscsi:@10.196.210.62::3260::iqn.1986-03.com.sun:ovs112-boot
 	slaunch.Debug("netroot flag is set with val=%s", val)
-	s := strings.Split(val, "::")
-	if len(s) != 3 {
-		return fmt.Errorf("%v: incorrect format ::,  Usage: netroot=iscsi:@10.X.Y.Z::1224::iqn.foo:hostname-bar, [Expecting len(%s) = 3] ", val, s)
+
+	var n *net.TCPAddr
+	n, volume, err := dhclient.ParseISCSIURI(val)
+	if err != nil {
+		return fmt.Errorf("dhclient ISCSI parser failed err=%v", err)
 	}
 
-	// s[0] = iscsi:@10.196.210.62 or iscsi:@10.196.210.62,2
-	// s[1] = 3260
-	// s[2] = iqn.1986-03.com.sun:ovs112-boot
-	port := s[1]
-	volume := s[2]
-
-	// split s[0] into tmp[1] and tmp[2]
-	tmp := strings.Split(s[0], ":@")
-	if len(tmp) > 3 || len(tmp) < 2 {
-		return fmt.Errorf("%v: incorrect format :@, Usage: netroot=iscsi:@10.X.Y.Z::1224::iqn.foo:hostname-bar, [ Expecting 2 <= len(%s) <= 3", val, tmp)
-	}
-
-	if tmp[0] != "iscsi" {
-		return fmt.Errorf("%v: incorrect format iscsi:, Usage: netroot=iscsi:@10.X.Y.Z::1224::iqn.foo:hostname-bar, [ %s != 'iscsi'] ", val, tmp[0])
-	}
-
-	ip := tmp[1] + ":" + port
+	ip := n.IP.String() + ":" + "3260"
+	slaunch.Debug("resolved ip:port=%v", ip)
+	slaunch.Debug("resolved vol=%v", volume)
 
 	slaunch.Debug("Scanning kernel cmd line for *rd.iscsi.initiator* flag")
 	initiatorName, ok := cmdline.Flag("rd.iscsi.initiator")
@@ -175,11 +162,4 @@ func scanIscsiDrives() error {
 		slaunch.Debug("Mounted at dev %v", devices[i])
 	}
 	return nil
-}
-
-func init() {
-	err := scanIscsiDrives()
-	if err != nil {
-		log.Printf("NO ISCSI DRIVES found, err=[%v]", err)
-	}
 }
