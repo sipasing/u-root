@@ -32,7 +32,6 @@ type Policy struct {
 	Collectors    []measurement.Collector
 	Launcher      launcher.Launcher
 	EventLog      eventlog.EventLog
-	DebugFileLoc  string
 }
 
 /*
@@ -168,7 +167,6 @@ func parse(pf []byte) (*Policy, error) {
 		Attestor      json.RawMessage   `json:"attestor"`
 		Launcher      json.RawMessage   `json:"launcher"`
 		EventLog      json.RawMessage   `json:"eventlog"`
-		DebugFileLoc  string            `json:"debugfileloc"`
 	}
 
 	if err := json.Unmarshal(pf, &parse); err != nil {
@@ -200,8 +198,6 @@ func parse(pf []byte) (*Policy, error) {
 			return nil, err
 		}
 	}
-
-	p.DebugFileLoc = parse.DebugFileLoc
 	return p, nil
 }
 

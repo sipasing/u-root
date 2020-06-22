@@ -5,7 +5,6 @@
 package main
 
 import (
-	// "bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -22,15 +21,13 @@ import (
 )
 
 var (
-	slDebug    = flag.Bool("d", false, "enable debug logs")
-	logfile    = "sluinit_log"
-	logBuilder strings.Builder
+	slDebug = flag.Bool("d", false, "enable debug logs")
 )
 
 func checkDebugFlag() {
 	/*
 	 * check if uroot.uinitargs=-d is set in kernel cmdline.
-	 * if set, everything is logged on stdout.
+	 * if set, slaunch.Debug is set to log.Printf.
 	 */
 	flag.Parse()
 
@@ -38,16 +35,9 @@ func checkDebugFlag() {
 		log.Fatal("Incorrect number of arguments")
 	}
 
-	slaunch.Debug = log.Printf
 	if *slDebug {
-		slaunch.Debug("debug flag is set. logging everything to stdout")
-	} else {
-		log.Println("debug flag is not set, only errors logged to stderr")
-		log.Println("debug flag is not set, logs written to file", logfile)
-		log.Println("collecting measurements before kexec. please wait...")
-		log.Println("This could take a couple of minutes")
-		log.SetOutput(&logBuilder)
-		log.Println() // empty line to start log builder
+		slaunch.Debug = log.Printf
+		slaunch.Debug("debug flag is set. Logging Enabled.")
 	}
 }
 
@@ -64,14 +54,8 @@ func checkDebugFlag() {
 func main() {
 	checkDebugFlag()
 
-	slaunch.Debug("********Step 0: mount iscsi drives if any ********")
-	err := scanIscsiDrives()
-	if err != nil {
-		log.Printf("NO ISCSI DRIVES found, err=[%v]", err)
-	}
-
 	defer unmountAndExit() // called only on error, on success we kexec
-	slaunch.Debug("********Step 1: get TPM Handle  ********")
+	slaunch.Debug("********Step 1: init completed. starting main ********")
 	if err := tpm.New(); err != nil {
 		log.Printf("tpm.New() failed. err=%v", err)
 		return
@@ -101,16 +85,13 @@ func main() {
 		return
 	}
 
-	slaunch.Debug("********Step 5: Parse eventlogs ********")
+	slaunch.Debug("********Step 5: Parse eventlogs *********")
 	if err := p.EventLog.Parse(); err != nil {
 		log.Printf("EventLog.Parse() failed err=%v", err)
 		return
 	}
 
-	if !*slDebug {
-		slaunch.AddToPersistQueue("debug logs", []byte(logBuilder.String()), p.DebugFileLoc, logfile)
-	}
-	slaunch.Debug("********Step 6: Dump logs to disk********")
+	slaunch.Debug("*****Step 6: Dump logs to disk *******")
 	if err := slaunch.ClearPersistQueue(); err != nil {
 		log.Printf("ClearPersistQueue failed err=%v", err)
 		return
@@ -131,12 +112,6 @@ func main() {
 func unmountAndExit() {
 	slaunch.UnmountAll()
 	time.Sleep(5 * time.Second) // let queued up debug statements get printed
-	if !*slDebug {
-		log.SetOutput(os.Stdout)
-		log.Print("exiting on error. log output set back to stdout")
-		log.Println("len=", len(logBuilder.String()))
-		log.Print(logBuilder.String())
-	}
 	os.Exit(1)
 }
 
@@ -144,14 +119,18 @@ func unmountAndExit() {
 // format: netroot=iscsi:@X.Y.Z.W::3260::iqn.FOO.com.abc:hostname-boot
 func scanIscsiDrives() error {
 
-	log.Println("Scanning kernel cmd line for *netroot* flag")
+	slaunch.Debug("Scanning kernel cmd line for *netroot* flag")
 	val, ok := cmdline.Flag("netroot")
 	if !ok {
 		return errors.New("netroot flag is not set")
 	}
 
+	// IP v4 address is any address of format 0-255 . 0-255 . 0-255 . 0-255
+	//r := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)){3}`)
+	//fmt.Println(r.MatchString("10.123.234.182"))
+
 	// val = iscsi:@10.196.210.62::3260::iqn.1986-03.com.sun:ovs112-boot
-	log.Println("netroot flag is set with val=", val)
+	slaunch.Debug("netroot flag is set with val=%s", val)
 	s := strings.Split(val, "::")
 	if len(s) != 3 {
 		return fmt.Errorf("%v: incorrect format ::,  Usage: netroot=iscsi:@10.X.Y.Z::1224::iqn.foo:hostname-bar, [Expecting len(%s) = 3] ", val, s)
@@ -175,7 +154,7 @@ func scanIscsiDrives() error {
 
 	ip := tmp[1] + ":" + port
 
-	log.Println("Scanning kernel cmd line for *rd.iscsi.initiator* flag")
+	slaunch.Debug("Scanning kernel cmd line for *rd.iscsi.initiator* flag")
 	initiatorName, ok := cmdline.Flag("rd.iscsi.initiator")
 	if !ok {
 		return errors.New("rd.iscsi.initiator flag is not set")
@@ -193,7 +172,14 @@ func scanIscsiDrives() error {
 	}
 
 	for i := range devices {
-		log.Println("Mounted at dev ", devices[i])
+		slaunch.Debug("Mounted at dev %v", devices[i])
 	}
 	return nil
+}
+
+func init() {
+	err := scanIscsiDrives()
+	if err != nil {
+		log.Printf("NO ISCSI DRIVES found, err=[%v]", err)
+	}
 }
